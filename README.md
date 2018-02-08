@@ -1,6 +1,20 @@
 # `quod`
 `quod` (querying OCRed documents) is a prototype Python-based command line tool for OCRing and querying digitised documents. It can be used either to OCR images and subsequently query them, or only to query previously OCRed images. It is written for Mac OS.
 
+## Installation
+`quod` must be stored, together with the accompanying imtess.sh script, in the _~/bin_ directory. To do this, `cd` to the directory where both files are and do
+
+    $ cp quod ~/bin
+    $ cp imtess.sh ~/bin
+
+Then, make `quod` executable:
+
+    $ cd ~/bin 
+    $ chmod +x quod
+
+## Dependencies
+To be able to run `quod`, you must have Python (v3.x) and Tesseract (https://github.com/tesseract-ocr/; v4.00.00 alpha gives significantly better results than v3.05.01, the latest stable version) installed on your computer. 
+
 ## Usage
 `quod` takes four compulsory arguments and is invoked using the following command:
 
@@ -19,19 +33,4 @@ The following command will, after first having OCRed all images in the directory
     $ quod ~/imgs 'some query string' 0.7 true 
    
 For each match found, the name of the corresponding image is returned.
-
-## Installation
-`quod` must be stored, together with the accompanying imtess.sh script, in the _~/bin_ directory. To do this, `cd` to the directory where both files are and do
-
-    $ cp quod ~/bin
-    $ cp imtess.sh ~/bin
-
-Then, make `quod` executable:
-
-    $ cd ~/bin 
-    $ chmod +x quod
-
-## Dependencies
-To be able to run `quod`, you must have Python (v3.x) and Tesseract (https://github.com/tesseract-ocr/; v4.00.00 alpha gives significantly better results than v3.05.01, the latest stable version) installed on your computer. 
-
 
