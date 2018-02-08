@@ -1,4 +1,4 @@
-# quod
+# `quod`
 `quod` (querying OCRed documents) is a prototype Python-based command line tool for OCRing and querying digitised documents. It can be used either to OCR images and subsequently query them, or only to query previously OCRed images. It is written for Mac OS.
 
 ## Usage
