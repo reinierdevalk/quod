@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Usage:
+# $ quod path query mrt ocr
+
+import sys
+import os
+import subprocess
+import time
+import re
+from difflib import *
+from sys import argv
+script, arg_path, arg_query, arg_mrt, arg_ocr = argv
+
+start = time.time()
+enc = sys.getdefaultencoding() # this is utf-8
+mrt = float(arg_mrt)
+ocr = False
+
+# check validity of arguments
+if not os.path.exists(arg_path):
+	print('invalid argument: path')
+	exit(0)
+
+prohibited_chars = []
+for c in prohibited_chars:
+	if c in arg_query:
+		print('invalid argument: query')
+		exit(0)
+
+if mrt > 1.0 or mrt < 0:
+	print('invalid argument: mrt')
+	exit(0)
+
+if arg_ocr == 'true'.casefold() or arg_ocr == 'yes'.casefold() or arg_ocr == 'y'.casefold():
+	ocr = True
+elif arg_ocr == 'false'.casefold() or arg_ocr == 'no'.casefold() or arg_ocr == 'n'.casefold():	 
+	ocr = False
+else:
+	print('invalid argument: ocr')
+	exit(0)
+
+bottoms =	['ekaha-schnellsicht', 
+			'lohnkarte zur lohnkarten-buchführung', 
+			'mitglieder- und leistungskarte', 
+			'personenkarte', 
+			'personenregisterkarte']
+
+doc_types = [['zivilarbeiter(in)', '0001_72837425_1', '0001_72837453_1', '0001_72837480_1', '0003_72837527_1', '0001_72837550_1', '0007_72837602_1', '0013_72837623_1', '0001_72837674_1', '0001_72837725_1'], 
+			['haupt-meldebogen', '0001_72837436_1', '0001_72837438_1', '0001_72837442_1', '0002_72837475_1'],
+			['gefolgschaftzabteilung', '0001_72837445_1', '0002_72837512_1'], 
+			['jahresverdienst-karte', '0002_72837446_1', '0003_72837447_1', '0001_72837515_1', '0002_72837516_1'],
+			['aufenthaltsanzeige', '0003_72837492_1', '0009_72837498_1', '0004_72837528_1', '0004_72837599_1', '0010_72837605_1', '0015_72837625_1', '0006_72837638_1', '0001_72837667_1'],
+			['zuständige kreispolizeibehörde', '0008_72837497_1', '0006_72837530_1', '0002_72837597_1', '0006_72837601_1', '0003_72837613_1', '0004_72837614_1', '0005_72837615_1'],
+			['fragebogen', '0002_72837503_1', '0001_72837505_1', '0002_72837509_1', '0002_72837578_1', '0001_72837649_1', '0002_72837685_1', '0002_72837707_1'], 
+			['lohn-abrechnungskarte', '0005_72837564_1', '0005_72837564_2', '0005_72837564_3'],
+			['lohn-konto', '0001_72837669_1', '0001_72837671_1', '0002_72837672_1', '0001_72837676_1', '0001_72837678_1', '0001_72837680_1'],
+			['ekaha-schnellsicht', '0001_72837455_1', '0001_72837521_1', '0001_72837525_1', '0001_72837558_1', '0001_72837723_1'],
+			['lohnkarte zur lohnkarten-buchführung', '0002_72837434_2', '0002_72837451_1'],
+			['mitglieder- und leistungskarte', '0001_72837429_1', '0002_72837491_1', '0001_72837548_1', '0001_72837647_2'],
+			['personenkarte', '0001_72837423_1', '0001_72837554_1', '0002_72837575_1'],
+			['personenregisterkarte', '0001_72837536_1', '0001_72837538_1']]
+
+#iteration 1
+# suffix = '-none.txt'
+# suffix = '-sk.txt'
+# suffix = '-sc_113.txt'
+# suffix = '-sc_125.txt'
+# suffix = '-sc_138.txt'
+# suffix = '-sc_150.txt'
+# suffix = '-bi_13.txt'
+# suffix = '-bi_25.txt'
+# suffix = '-bi_38.txt'
+# suffix = '-bi_50.txt'
+# suffix = '-no_1.txt'
+# suffix = '-no_2.txt'
+# suffix = '-no_3.txt'
+# suffix = '-no_4.txt'
+# iteration 2
+suffix = '-sk-sc_113.txt'
+# suffix = '-sk-sc_125.txt'
+# suffix = '-sk-sc_138.txt'
+# suffix = '-sk-sc_150.txt'
+# suffix = '-sk-bi_13.txt'
+# suffix = '-sk-bi_25.txt'
+# suffix = '-sk-bi_38.txt'
+# suffix = '-sk-bi_50.txt'
+# suffix = '-sk-no_1.txt'
+# suffix = '-sk-no_2.txt'
+# suffix = '-sk-no_3.txt'
+# suffix = '-sk-no_4.txt'
+# iteration 3
+# suffix = '-sk-sc_113-bi_13.txt'
+# suffix = '-sk-sc_113-bi_25.txt'
+# suffix = '-sk-sc_113-bi_38.txt'
+# suffix = '-sk-sc_113-bi_50.txt'
+# suffix = '-sk-sc_113-no_1.txt'
+# suffix = '-sk-sc_113-no_2.txt'
+# suffix = '-sk-sc_113-no_3.txt'
+# suffix = '-sk-sc_113-no_4.txt'
+
+
+def OCR_imgs(path, suffix):
+	"""
+	OCRs each image in the path by calling imtess.sh.
+
+	Args:
+		path:				the path to the folder containing the images to OCR
+		suffix: 			the suffix for the OCR output files
+	"""
+
+	# search all files in all subdirs in dir_tree. if dir_tree contains no subdirs, all files in path are searched 
+	# subdir: directory (including all parents) inside path, including path itself 
+	# dirs: directories (only last child) inside subdir
+	# files: files inside subdir
+	num_files = 0
+	dir_tree = sorted(os.walk(path)) 
+	# if there are no subdirectories inside path, len(dir_tree) == 1; else, it is 1 + the number of subdirectories 	
+	num_dirs_inside = len(dir_tree) - 1
+	for subdir, dirs, files in dir_tree:
+		# if dir_tree contains no subdirectories or if dir_tree contains subdirectories and subdir is not path
+		if (subdir == path and num_dirs_inside == 0) or subdir != path:
+			print(subdir[len(path):])
+			if (len(dirs) > 0): # folder in subdir (currently always none)
+				print(dirs)
+			for file in sorted(files): # .jpg in subdir
+				if file.endswith('.jpg'):
+					num_files += 1
+					print(file)
+					cmd = 'sh imtess.sh ' + subdir + '/' + file + ' ' + suffix
+					proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
+											stderr=subprocess.STDOUT, shell=True)
+					(res, err) = proc.communicate()
+					output = res.decode(enc) # the output printed in the terminal see http://stackoverflow.com/questions/606191/convert-bytes-to-a-python-string
+					print(output)
+	print('--- ' + str(num_files) + ' OCRed')
+
+
+def match(content, term, mrt):
+	"""
+	Check if the given content contains the given term, using the given match ratio threshold. Capitalisation is ignored.
+
+	Args:
+		content:			the content of the OCr output file as a list of strings
+		term:				the term to match; may contain of multiple substrings
+		mrt:				the match ratio threshold
+
+	Returns:
+		A list containing at index 0 a boolean indicating whether or not a match was found, at index 1 
+		the highest match ratio, and at index 2 the substring going with that highest match ratio (in case of
+		a draw, this is the first substring that gets this match ratio)  
+	"""
+
+	highest_match_ratio = 0
+	best_substring = ''
+	# determine number of words in term (where words are separated by spaces)
+	words_in_term = len(term.split())
+
+	# for each consecutive words_in_term-sized substring in content: determine the match ratio. if it exceeds
+	# the highest match ratio so far, best_substring is updated
+	for i in range(0, len(content)):
+		substring = ''
+		# create the words_in_term-sized substring starting at i
+		if i <= len(content) - words_in_term:
+			for j in range(i, i + words_in_term):
+				substring = substring + content[j] + ' '
+		substring = substring.strip()
+
+		# if match_ratio exceeds highest_match_ratio: update substring 
+		# NB: in case of a draw, the substring is not updated - the first substring that gets the highest
+		# match ratio is thus the one that is updated. (This can be changed to the last by replacing '>' with '>='.) 
+		match_ratio = SequenceMatcher(None, substring.lower(), term.lower()).ratio()
+		if (match_ratio > highest_match_ratio):
+			highest_match_ratio = match_ratio
+			best_substring = substring
+	
+	# if highest_match_ratio equals or exceeds mrt
+	match_found = highest_match_ratio >= mrt
+	return (match_found >= mrt, highest_match_ratio, best_substring)
+
+
+def match_term(path, query, mrt):
+	"""Queries the images in path for the given term. Can be run in evaluation and in application mode.
+
+	Args:
+		path:				the path to the folder containing the text files to query
+		query: 				the query string; can consist of multiple terms. If this is an empty string, the method is
+							run in evaluation mode
+		mrt:				the match ratio threshold
+	
+	Returns:
+		If run in evaluation mode, the precision and recall values and the information used to calculate them; if run
+		in application mode, a list of images for which a match with the query was found
+	"""
+	
+	all_terms = []
+	prepr = False
+	if query == '':
+		prepr = True
+		all_terms = [row[0] for row in doc_types]
+
+	num_imgs_searched = 0
+	list_of_jpgs = []
+	num_top_terms = 0
+	num_bottom_terms = 0
+	matches = 0
+	top_matches = 0
+	bottom_matches = 0
+	TP = 0
+	FP = 0
+	FN = 0
+	
+	# search all files in all subdirs in dir_tree. if dir_tree contains no subdirs, all files in path are searched 
+	# subdir: directory (including all parents) inside path, including path itself 
+	# dirs: directories (only last child) inside subdir
+	# files: files inside subdir 
+	dir_tree = sorted(os.walk(path)) 
+	# if there are no subdirectories inside path, len(dir_tree) == 1; else, it is 1 + the number of subdirectories 	
+	num_dirs_inside = len(dir_tree) - 1
+	for subdir, dirs, files in dir_tree:	
+		# if dir_tree contains no subdirectories or if dir_tree contains subdirectories and subdir is not path
+		if (subdir == path and num_dirs_inside == 0) or subdir != path:
+			# get short subdir name (last child; see https://stackoverflow.com/questions/3925096/how-to-get-only-the-last-part-of-a-path-in-python)
+			subdir_short = os.path.basename(os.path.normpath(subdir))
+			# for each file in subdir 
+			for file in sorted(files):	
+				if file.endswith(suffix): # and not file.endswith('-bi' + suffix):
+					num_imgs_searched = num_imgs_searched + 1
+
+					# get fileID and document type
+					fileID = file[:-len(suffix)]
+					doc_type = '' 
+					for item in doc_types:
+						if fileID in item:
+							doc_type = item[0]
+							break				
+					
+					# get the content of file as a list of words 
+					with open(subdir + '/' + file) as f:
+						content = f.read().split()
+					
+					# preprocessing case
+					if prepr:
+						print('\nsubdir  ' + subdir_short)
+						print('file    ' + fileID + '.jpg' + ' ................ ' + doc_type)
+						# determine whether the file is a top or bottom term image  
+						is_bottom_img = False
+						for item in doc_types:
+							if fileID in item:
+								if item[0] in bottoms: 
+									num_bottom_terms = num_bottom_terms + 1
+									is_bottom_img = True
+								else :
+									num_top_terms = num_top_terms + 1
+								break
+
+						# for each query term in all_terms
+						for i in range(0, len(all_terms)):
+							term = all_terms[i]
+							unadapted_term = term
+							if '_' in term:
+								term = term.replace('_', ' ')	
+							
+							# query file for term
+							match_info = match(content, term, mrt)
+
+							# if a match is found: TP or FP
+							if match_info[0]:
+								print('        query   \'' + term + '\'')
+								print('        match with \'' + match_info[2] + '\' (match ratio = ' + 
+									str(match_info[1])[:6] + ')')
+							
+								# check whether the match is a TP or a FP
+								if fileID in doc_types[i]:
+									TP = TP + 1
+									print('        TP retrieved    ----------------')
+									matches = matches + 1
+									if is_bottom_img:
+										bottom_matches = bottom_matches + 1
+									else:
+										top_matches = top_matches + 1
+								else:
+									FP = FP +1
+									print('        FP retrieved    ----------------')	
+							# if no match is found
+							else:
+								if fileID in doc_types[i]:
+									FN = FN + 1
+									print('        query   \'' + term + '\'')
+									print('        no match')
+									print('        FN retrieved    ----------------')
+					
+					# application case
+					else:
+						num_imgs_searched = num_imgs_searched + 1
+
+						# query file for term
+						match_info = match(content, query, mrt)
+						if match_info[0]:
+							matches = matches + 1
+							print('\nsubdir  ' + subdir_short)
+							print('file    ' + fileID + '.jpg' + ' ................ ' + doc_type)
+							print('        query   \'' + query + '\'')
+							print('        match with \'' + match_info[2] + '\' (match ratio = ' + 
+								str(match_info[1])[:6] + ')')
+
+							# add file to list
+							img = subdir_short + '/' + fileID + '.jpg'
+							if not img in list_of_jpgs:
+								list_of_jpgs.append(img)
+						
+	# calculate overall metrics
+	if prepr:
+		print('\nlarge   ' + str(top_matches) + '/' + str(num_top_terms) + ', acc = ' + str(top_matches/num_top_terms))
+		print('small   ' + str(bottom_matches) + '/' + str(num_bottom_terms) + ', acc = ' + str(bottom_matches/num_bottom_terms))
+		print('all     ' + str(matches) + '/' + str(num_imgs_searched) + ', acc = ' + str(matches/num_imgs_searched))
+		print('items   ' + str(num_imgs_searched))
+		print('TP      ' + str(TP))
+		print('FP      ' + str(FP))
+		print('FN      ' + str(FN))
+		print('prc     ' + str(TP / (TP+FP)))
+		print('rcl     ' + str(TP / (TP+FN)))
+
+	else:
+		print('\nquery: ' + '\'' + query + '\'')
+		print(str(matches) + ' images retrieved:')
+		for img in list_of_jpgs:
+			print(img)
+					
+
+if ocr:
+	OCR_imgs(arg_path, suffix)
+match_term(arg_path, arg_query, mrt)
